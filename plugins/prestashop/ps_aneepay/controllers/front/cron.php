@@ -10,6 +10,15 @@ class Ps_AneepayCronModuleFrontController extends ModuleFrontController {
 			$this->respond(500, array('success' => false, 'message' => 'module not loaded'));
 		}
 
+		// The poller is a public front controller, so it must be gated by a
+		// secret: otherwise any visitor could drive status transitions for
+		// every pending order. The secret is generated once and persisted.
+		$provided = (string) Tools::getValue('secret');
+
+		if ('' === $provided || !hash_equals($module->cronSecret(), $provided)) {
+			$this->respond(403, array('success' => false, 'message' => 'forbidden'));
+		}
+
 		// No-overlap guard. A lock older than 10 minutes is considered stale
 		// (a previous run crashed) and is taken over.
 		$lock = _PS_CACHE_DIR_ . 'aneepay_cron_lock';

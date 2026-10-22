@@ -802,13 +802,109 @@ class Ps_Aneepay extends PaymentModule {
 	}
 
 	/**
+	 * Signed, expiring token binding an order to this browser.
+	 *
+	 * The result/check controllers used to trust a bare integer cookie, which
+	 * anyone could forge to probe another buyer's order (IDOR). Signing it
+	 * with the shop's cookie secret makes a forged value useless.
+	 *
+	 * @param int $id_order Order id.
+	 * @return string "<id_order>.<expiry>.<hmac>"
+	 */
+	public function orderToken($id_order) {
+		$payload = (int) $id_order . '.' . (time() + 3600);
+
+		return $payload . '.' . $this->signOrderPayload($payload);
+	}
+
+	/**
+	 * Read the signed order cookie and return the validated order id.
+	 *
+	 * @return int Order id, or 0 when the cookie is missing/invalid/forged.
+	 */
+	public function resultOrderId() {
+		$raw = isset($this->context->cookie->aneepay_order_id) ? (string) $this->context->cookie->aneepay_order_id : '';
+
+		if ('' === $raw) {
+			return 0;
+		}
+
+		$parts = explode('.', $raw);
+
+		if (3 !== count($parts)) {
+			return 0;
+		}
+
+		list($id_order, $expiry, $signature) = $parts;
+
+		if (!ctype_digit($id_order) || !ctype_digit($expiry)) {
+			return 0;
+		}
+
+		if ((int) $expiry < time()) {
+			return 0;
+		}
+
+		$payload = $id_order . '.' . $expiry;
+
+		if (!hash_equals($this->signOrderPayload($payload), (string) $signature)) {
+			return 0;
+		}
+
+		return (int) $id_order;
+	}
+
+	/**
+	 * @param string $payload Payload to sign.
+	 * @return string
+	 */
+	protected function signOrderPayload($payload) {
+		return hash_hmac('sha256', (string) $payload, $this->orderCookieSecret());
+	}
+
+	/**
+	 * Secret used to sign the order cookie. Generated once and persisted.
+	 *
+	 * @return string
+	 */
+	protected function orderCookieSecret() {
+		$secret = (string) Configuration::get('ANEEPAY_COOKIE_SECRET');
+
+		if ('' === $secret) {
+			$secret = bin2hex(random_bytes(16));
+			Configuration::updateValue('ANEEPAY_COOKIE_SECRET', $secret);
+		}
+
+		return $secret;
+	}
+
+	/**
+	 * Secret required to invoke the public cron poller.
+	 *
+	 * Generated once and persisted. cron.php refuses to run without it so the
+	 * endpoint cannot be triggered by arbitrary visitors.
+	 *
+	 * @return string
+	 */
+	public function cronSecret() {
+		$secret = (string) Configuration::get('ANEEPAY_CRON_SECRET');
+
+		if ('' === $secret) {
+			$secret = bin2hex(random_bytes(16));
+			Configuration::updateValue('ANEEPAY_CRON_SECRET', $secret);
+		}
+
+		return $secret;
+	}
+
+	/**
 	 * Data for the success/fail result page.
 	 *
 	 * @param bool $is_success Whether it is the success page.
 	 * @return array
 	 */
 	public function resultData($is_success) {
-		$order_id = (int) $this->context->cookie->aneepay_order_id;
+		$order_id = $this->resultOrderId();
 
 		$data = array(
 			'is_success'   => (bool) $is_success,

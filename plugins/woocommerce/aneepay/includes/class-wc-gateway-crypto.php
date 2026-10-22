@@ -728,7 +728,7 @@ class WC_Gateway_AneePay_Crypto extends WC_Payment_Gateway {
 
 		if ( '' !== $existing_url && in_array( $existing_status, array( '', 'pending' ), true ) ) {
 			$order->update_status( 'pending', __( 'AneePay: reusing the existing pending payment.', 'aneepay-crypto-gateway' ) );
-			wc_setcookie( 'aneepay_order', (string) $order_id, time() + HOUR_IN_SECONDS, is_ssl() );
+			aneepay_set_order_cookie( $order );
 
 			return array(
 				'result'   => 'success',
@@ -764,7 +764,7 @@ class WC_Gateway_AneePay_Crypto extends WC_Payment_Gateway {
 
 		// Track the order so the store-side success/fail pages (configured in
 		// the AneePay panel as SUCCESS_URL / FAIL_URL) can identify it.
-		wc_setcookie( 'aneepay_order', (string) $order_id, time() + HOUR_IN_SECONDS, is_ssl() );
+		aneepay_set_order_cookie( $order );
 
 		return array(
 			'result'   => 'success',
@@ -1157,6 +1157,107 @@ function aneepay_find_order_by_meta( $meta_key, $meta_value ) {
 }
 
 /**
+ * Whether the current request may poll the given order's status.
+ *
+ * The status-poll AJAX action is reachable by any checkout visitor (nonce is
+ * not per-order), so an order-key or customer check is required to stop one
+ * visitor from polling / state-changing someone else's order (IDOR).
+ *
+ * @param WC_Order $order Order object.
+ * @return bool
+ */
+function aneepay_current_user_owns_order( $order ) {
+	if ( current_user_can( 'manage_woocommerce' ) ) {
+		return true;
+	}
+
+	if ( is_user_logged_in() && (int) $order->get_customer_id() === get_current_user_id() ) {
+		return true;
+	}
+
+	// Guest checkout: the order-pay / thank-you page carries the order key,
+	// which the template forwards alongside the order id.
+	$provided_key = isset( $_POST['orderKey'] ) ? wc_clean( wp_unslash( $_POST['orderKey'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+
+	if ( '' !== $provided_key && hash_equals( (string) $order->get_order_key(), (string) $provided_key ) ) {
+		return true;
+	}
+
+	return false;
+}
+
+/**
+ * Build a signed, expiring token that binds an order to the customer's browser.
+ *
+ * The result-page cookie is the only handle the store-side success/fail pages
+ * have to identify the order. Signing it with the site auth salt prevents an
+ * attacker from minting a cookie for an arbitrary order id (IDOR).
+ *
+ * @param WC_Order $order Order object.
+ * @return string Token of the form "<order_id>.<expiry>.<hmac>".
+ */
+function aneepay_order_token( $order ) {
+	$order_id = (int) $order->get_id();
+	$expiry   = time() + HOUR_IN_SECONDS;
+	$payload  = $order_id . '.' . $expiry;
+
+	return $payload . '.' . hash_hmac( 'sha256', $payload, wp_salt( 'auth' ) );
+}
+
+/**
+ * Set the signed order-tracking cookie for the hosted-checkout redirect.
+ *
+ * @param WC_Order $order Order object.
+ * @return void
+ */
+function aneepay_set_order_cookie( $order ) {
+	wc_setcookie( 'aneepay_order', aneepay_order_token( $order ), time() + HOUR_IN_SECONDS, is_ssl() );
+}
+
+/**
+ * Resolve and validate the signed order cookie set at checkout.
+ *
+ * @return WC_Order|null Order only when the cookie signature and expiry are valid.
+ */
+function aneepay_get_cookie_order() {
+	if ( empty( $_COOKIE['aneepay_order'] ) ) {
+		return null;
+	}
+
+	$raw   = sanitize_text_field( wp_unslash( $_COOKIE['aneepay_order'] ) );
+	$parts = explode( '.', $raw );
+
+	if ( 3 !== count( $parts ) ) {
+		return null;
+	}
+
+	list( $order_id, $expiry, $signature ) = $parts;
+
+	if ( ! ctype_digit( $order_id ) || ! ctype_digit( $expiry ) ) {
+		return null;
+	}
+
+	if ( (int) $expiry < time() ) {
+		return null;
+	}
+
+	$payload  = $order_id . '.' . $expiry;
+	$expected = hash_hmac( 'sha256', $payload, wp_salt( 'auth' ) );
+
+	if ( ! hash_equals( $expected, (string) $signature ) ) {
+		return null;
+	}
+
+	$order = wc_get_order( absint( $order_id ) );
+
+	if ( $order && ANEEPAY_PAYMENT_GATEWAY_ID === $order->get_payment_method() ) {
+		return $order;
+	}
+
+	return null;
+}
+
+/**
  * AJAX handler: poll the AneePay API for a single order and update it.
  *
  * @return void
@@ -1169,6 +1270,10 @@ function aneepay_ajax_check_status() {
 
 	if ( ! $order || $order->get_payment_method() !== ANEEPAY_PAYMENT_GATEWAY_ID ) {
 		wp_send_json_error( array( 'message' => 'Invalid order' ) );
+	}
+
+	if ( ! aneepay_current_user_owns_order( $order ) ) {
+		wp_send_json_error( array( 'message' => 'Forbidden' ), 403 );
 	}
 
 	$gateway = new WC_Gateway_AneePay_Crypto();

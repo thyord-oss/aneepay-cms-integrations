@@ -403,10 +403,11 @@ function aneepay_render_result_page() {
 		return;
 	}
 
-	$order_id = isset( $_COOKIE['aneepay_order'] ) ? absint( wp_unslash( $_COOKIE['aneepay_order'] ) ) : 0; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
-	$order    = $order_id ? wc_get_order( $order_id ) : null;
+	// The cookie is signed and expiring (see aneepay_get_cookie_order()); an
+	// unsigned/forged cookie yields no order context instead of leaking one.
+	$order = function_exists( 'aneepay_get_cookie_order' ) ? aneepay_get_cookie_order() : null;
 
-	if ( $order && ANEEPAY_PAYMENT_GATEWAY_ID === $order->get_payment_method() ) {
+	if ( $order ) {
 		aneepay_sync_order_from_api( $order );
 		$status = $order->get_meta( '_aneepay_payment_status', true );
 	} else {

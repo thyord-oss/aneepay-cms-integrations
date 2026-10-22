@@ -351,9 +351,10 @@ class ControllerExtensionPaymentAneePay extends Controller {
 		$this->load->model('extension/payment/aneepay');
 		$this->load->model('checkout/order');
 
+		// Only the session established at confirm() is trusted. The old
+		// ?aneepay_order=N fallback let any visitor fetch another buyer's
+		// order number/total/payment id by guessing the id (IDOR).
 		$order_id = isset($this->session->data['aneepay_order']) ? (int) $this->session->data['aneepay_order'] : 0;
-		$uri      = isset($this->request->get['aneepay_order']) ? (int) $this->request->get['aneepay_order'] : 0;
-		$order_id = $order_id ? $order_id : $uri;
 
 		$data = $this->result_facing($order_id, true, (string) ($this->request->get['result'] ?? ''), (string) ($this->request->get['payment'] ?? ''));
 
@@ -368,9 +369,8 @@ class ControllerExtensionPaymentAneePay extends Controller {
 		$this->load->model('extension/payment/aneepay');
 		$this->load->model('checkout/order');
 
+		// Session-only: see success() above.
 		$order_id = isset($this->session->data['aneepay_order']) ? (int) $this->session->data['aneepay_order'] : 0;
-		$uri      = isset($this->request->get['aneepay_order']) ? (int) $this->request->get['aneepay_order'] : 0;
-		$order_id = $order_id ? $order_id : $uri;
 
 		$data = $this->result_facing($order_id, false, (string) ($this->request->get['result'] ?? ''), (string) ($this->request->get['payment'] ?? ''));
 
@@ -492,6 +492,30 @@ class ControllerExtensionPaymentAneePay extends Controller {
 			$this->response->setOutput(json_encode(array('status' => 'invalid')));
 			return;
 		}
+
+		// Ownership: the order must be the one this browser started at
+		// confirm(). Without this check any visitor could poll / trigger a
+		// status transition for an arbitrary order id (IDOR).
+		$session_order = isset($this->session->data['aneepay_order']) ? (int) $this->session->data['aneepay_order'] : 0;
+
+		if (!$session_order || $session_order !== $order_id) {
+			$this->response->setOutput(json_encode(array('status' => 'forbidden')));
+			return;
+		}
+
+		// Cheap per-session rate limit so the endpoint cannot be used to
+		// hammer the AneePay API for a known order.
+		$rate_key = 'aneepay_check_' . $order_id;
+
+		if ($this->cache->get($rate_key)) {
+			$mapping = $this->model_extension_payment_aneepay->getByOrderId($order_id);
+			$last    = $mapping && !empty($mapping['payment_status']) ? (string) $mapping['payment_status'] : 'pending';
+
+			$this->response->setOutput(json_encode(array('status' => $last)));
+			return;
+		}
+
+		$this->cache->set($rate_key, 1, 3);
 
 		$mapping = $this->model_extension_payment_aneepay->getByOrderId($order_id);
 

@@ -14,6 +14,7 @@
 	}
 
 	var orderId = block.getAttribute('data-order-id');
+	var orderKey = block.getAttribute('data-order-key') || '';
 	var attempts = 0;
 	var timer = null;
 	var params = window.aneepayParams || {};
@@ -32,6 +33,7 @@
 		body.append('action', 'aneepay_check_status');
 		body.append('nonce', params.nonce);
 		body.append('orderId', orderId);
+		body.append('orderKey', orderKey);
 
 		return fetch(params.ajaxUrl, {
 			method: 'POST',

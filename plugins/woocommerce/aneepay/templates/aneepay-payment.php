@@ -22,7 +22,7 @@ $status       = (string) $order->get_meta( '_aneepay_payment_status', true );
 $token_amount = (string) $order->get_meta( '_aneepay_token_amount', true );
 $token        = strtoupper( (string) $order->get_meta( '_aneepay_token', true ) );
 ?>
-<div class="aneepay-payment" data-order-id="<?php echo esc_attr( $order_id ); ?>" data-payment-status="<?php echo esc_attr( $status ); ?>">
+<div class="aneepay-payment" data-order-id="<?php echo esc_attr( $order_id ); ?>" data-order-key="<?php echo esc_attr( $order->get_order_key() ); ?>" data-payment-status="<?php echo esc_attr( $status ); ?>">
 	<div class="aneepay-payment-card">
 		<div class="aneepay-payment-spinner"></div>
 

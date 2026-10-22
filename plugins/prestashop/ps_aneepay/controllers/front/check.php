@@ -17,8 +17,15 @@ class Ps_AneepayCheckModuleFrontController extends ModuleFrontController {
 			$this->respond(400, array('status' => 'invalid'));
 		}
 
+		// Ownership: the order must match the signed cookie set at checkout.
+		// Without it any visitor could poll / trigger a status transition for
+		// an arbitrary order id (IDOR).
+		if ($module->resultOrderId() !== $order_id) {
+			$this->respond(403, array('status' => 'forbidden'));
+		}
+
 		$order_model = new AneePayOrder();
-		$row = $order_model->getByOrder((int) $order_id);
+		$row         = $order_model->getByOrder((int) $order_id);
 
 		if (!$row) {
 			$this->respond(404, array('status' => 'not_found'));
@@ -26,6 +33,19 @@ class Ps_AneepayCheckModuleFrontController extends ModuleFrontController {
 
 		if (!empty($row['payment_status']) && !in_array((string) $row['payment_status'], array('', 'pending'), true)) {
 			$this->respond(200, array('status' => (string) $row['payment_status']));
+		}
+
+		// Rate limit (per order): a short-lived cookie throttles how often this
+		// browser can force an API re-check, so the endpoint cannot be used to
+		// hammer AneePay for a known order.
+		$throttleKey = 'aneepay_check_' . $order_id;
+
+		if (!isset($this->context->cookie->{$throttleKey})) {
+			$this->context->cookie->__set($throttleKey, time() + 3, time() + 3);
+		} elseif ((int) $this->context->cookie->{$throttleKey} > time()) {
+			$this->respond(200, array('status' => (string) $row['payment_status']));
+		} else {
+			$this->context->cookie->__set($throttleKey, time() + 3, time() + 3);
 		}
 
 		try {
