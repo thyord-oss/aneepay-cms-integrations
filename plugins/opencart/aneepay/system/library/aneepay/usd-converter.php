@@ -130,7 +130,11 @@ class AneePay_Usd_Converter {
 	protected function fetch_auto_rate($currency) {
 		$cache = $this->cache_get('aneepay_rate_' . strtolower($currency));
 
-		if (is_array($cache) && isset($cache['rate']) && (float) $cache['rate'] > 0) {
+		if (is_array($cache)
+			&& isset($cache['rate'], $cache['time'])
+			&& (float) $cache['rate'] > 0
+			&& (time() - (int) $cache['time']) < 3600
+		) {
 			return (float) $cache['rate'];
 		}
 

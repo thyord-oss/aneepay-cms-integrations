@@ -207,7 +207,11 @@ class AneePayUsdConverter {
 
 		$cached = json_decode((string) file_get_contents($cache_file), true);
 
-		if (is_array($cached) && isset($cached['rate']) && (float) $cached['rate'] > 0) {
+		if (is_array($cached)
+			&& isset($cached['rate'], $cached['time'])
+			&& (float) $cached['rate'] > 0
+			&& (time() - (int) $cached['time']) < 3600
+		) {
 			return (float) $cached['rate'];
 		}
 
