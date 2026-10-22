@@ -27,11 +27,11 @@
 		<p>{l s='This page updates automatically. Once you have completed the payment, press the button below to refresh the status instantly.' mod='ps_aneepay'}</p>
 
 		{if $pay_now}
-			<p class="aneepay-pending-amount">{l s='Amount' mod='ps_aneepay'}: <strong>{$pay_now}</strong></p>
+			<p class="aneepay-pending-amount">{l s='Amount' mod='ps_aneepay'}: <strong>{$pay_now|escape:'html':'UTF-8'}</strong></p>
 		{/if}
 
 		{if $network}
-			<p class="aneepay-pending-meta">{l s='Network' mod='ps_aneepay'}: {$network}{if $sandbox} &middot; {l s='testnet' mod='ps_aneepay'}{/if}</p>
+			<p class="aneepay-pending-meta">{l s='Network' mod='ps_aneepay'}: {$network|escape:'html':'UTF-8'}{if $sandbox} &middot; {l s='testnet' mod='ps_aneepay'}{/if}</p>
 		{/if}
 
 		<p class="aneepay-pending-info">{l s='Payments are non-custodial: the funds go directly from your wallet to the merchant, minus a fixed 0.5% fee. No account or KYC is required.' mod='ps_aneepay'}</p>
@@ -44,20 +44,20 @@
 		</div>
 
 		<div class="aneepay-pending-actions">
-			<a href="{$checkout_url}" target="_blank" rel="noopener" class="btn btn-primary btn-lg" id="aneepay-pay-now">{l s='Pay now' mod='ps_aneepay'}</a>
+			<a href="{$checkout_url|escape:'html':'UTF-8'}" target="_blank" rel="noopener" class="btn btn-primary btn-lg" id="aneepay-pay-now">{l s='Pay now' mod='ps_aneepay'}</a>
 			<button type="button" class="btn btn-default" id="aneepay-i-paid">{l s='I already paid' mod='ps_aneepay'}</button>
 		</div>
 
-		<p><a href="{$shop_url}">{l s='Back to shop' mod='ps_aneepay'}</a></p>
+		<p><a href="{$shop_url|escape:'html':'UTF-8'}">{l s='Back to shop' mod='ps_aneepay'}</a></p>
 	</div>
 </div>
 
 <script>
 (function () {
 	'use strict';
-	var checkUrl = '{$check_url}';
-	var successUrl = '{$success_url}';
-	var failUrl = '{$fail_url}';
+	var checkUrl = '{$check_url|escape:'javascript'}';
+	var successUrl = '{$success_url|escape:'javascript'}';
+	var failUrl = '{$fail_url|escape:'javascript'}';
 	var orderId = {$order_id};
 	var attempts = 0;
 	var btn = document.getElementById('aneepay-i-paid');

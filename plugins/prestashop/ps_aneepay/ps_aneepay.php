@@ -21,7 +21,7 @@ class Ps_Aneepay extends PaymentModule {
 		$this->author                = 'AneePay';
 		$this->need_instance         = 0;
 		$this->bootstrap             = true;
-		$this->ps_versions_compliancy = array('min' => '1.7.0.0', 'max' => _PS_VERSION_);
+		$this->ps_versions_compliancy = array('min' => '1.7.0', 'max' => _PS_VERSION_);
 
 		parent::__construct();
 
@@ -128,6 +128,7 @@ class Ps_Aneepay extends PaymentModule {
 			'ANEEPAY_PAID_STATE'      => (string) Configuration::get('PS_OS_PAYMENT'),
 			'ANEEPAY_FAILED_STATE'    => (string) Configuration::get('PS_OS_ERROR'),
 			'ANEEPAY_CANCELLED_STATE' => (string) Configuration::get('PS_OS_CANCELED'),
+			'ANEEPAY_KEEP_DATA'       => '1',
 		);
 
 		foreach ($defaults as $key => $value) {
@@ -170,33 +171,67 @@ class Ps_Aneepay extends PaymentModule {
 	/**
 	 * Canonical storefront host used as the Origin fallback.
 	 *
-	 * Prefers the Link::getShopDomain() value, then the shop/base URL
-	 * constants. Only the host is returned (no scheme, port or path).
+	 * Tries the shop domain fields, the storefront base URL and the core URL
+	 * constants, then the current HTTP host. Only the host is returned (no
+	 * scheme, port or path).
 	 *
 	 * @return string Host, or '' when it cannot be resolved.
 	 */
 	public function shopHost() {
-		if (isset($this->context->link)) {
-			$host = parse_url((string) $this->context->link->getShopDomain(), PHP_URL_HOST);
+		$candidates = array();
 
-			if (is_string($host) && '' !== $host) {
-				return $host;
-			}
+		if (isset($this->context->shop) && Validate::isLoadedObject($this->context->shop)) {
+			$candidates[] = (string) $this->context->shop->domain;
+			$candidates[] = (string) $this->context->shop->domain_ssl;
 		}
 
-		foreach (array('PS_SHOP_URL', 'PS_SHOP_BASE_URI') as $const) {
-			if (!defined($const)) {
-				continue;
-			}
+		if (isset($this->context->link)) {
+			$candidates[] = (string) $this->context->link->getBaseLink();
+		}
 
-			$host = parse_url((string) constant($const), PHP_URL_HOST);
+		if (defined('_PS_BASE_URL_SSL_')) {
+			$candidates[] = (string) _PS_BASE_URL_SSL_;
+		}
 
-			if (is_string($host) && '' !== $host) {
+		if (defined('_PS_BASE_URL_')) {
+			$candidates[] = (string) _PS_BASE_URL_;
+		}
+
+		$candidates[] = (string) Tools::getHttpHost();
+
+		foreach ($candidates as $candidate) {
+			$host = $this->hostFromUrl($candidate);
+
+			if ('' !== $host) {
 				return $host;
 			}
 		}
 
 		return '';
+	}
+
+	/**
+	 * Extract a host from a URL or a bare host[:port] string.
+	 *
+	 * @param string $value URL or host.
+	 * @return string Host, or '' when it cannot be resolved.
+	 */
+	protected function hostFromUrl($value) {
+		$value = trim((string) $value);
+
+		if ('' === $value) {
+			return '';
+		}
+
+		// parse_url() needs a scheme (or at least "//") to populate the host
+		// component for bare hosts such as "shop.example.com:8080".
+		if (false === strpos($value, '://')) {
+			$value = '//' . ltrim($value, '/');
+		}
+
+		$host = parse_url($value, PHP_URL_HOST);
+
+		return is_string($host) ? $host : '';
 	}
 
 	/**
@@ -367,13 +402,24 @@ class Ps_Aneepay extends PaymentModule {
 	public function getContent() {
 		$output = '';
 
-		if (Tools::isSubmit('submitAneepay')) {
+		$is_submit = Tools::isSubmit('submitAneepay')
+			|| Tools::isSubmit('submitAneepayTest')
+			|| Tools::isSubmit('submitAneepayClearLog')
+			|| Tools::isSubmit('submitAneepayRefreshLog');
+		$token_valid = !$is_submit
+			|| (string) Tools::getValue('token') === (string) Tools::getAdminTokenLite('AdminModules');
+
+		if ($is_submit && !$token_valid) {
+			$output .= $this->displayError($this->l('Invalid security token. Please reload the page and try again.'));
+		} elseif (Tools::isSubmit('submitAneepay')) {
 			$output .= $this->postProcess();
 		} elseif (Tools::isSubmit('submitAneepayTest')) {
 			$output .= $this->renderTestConnectionResult();
 		} elseif (Tools::isSubmit('submitAneepayClearLog')) {
 			$this->getApi()->clear_request_log();
 			$output .= $this->displayConfirmation($this->l('Request log cleared.'));
+		} elseif (Tools::isSubmit('submitAneepayRefreshLog')) {
+			$output .= '';
 		}
 
 		$account_id = (string) Configuration::get('ANEEPAY_ACCOUNT_ID');
@@ -468,6 +514,7 @@ class Ps_Aneepay extends PaymentModule {
 
 		$html  = '<div class="panel"><div class="panel-heading"><i class="icon-plug"></i> ' . $this->l('Connection check') . '</div><div class="panel-body">';
 		$html .= '<form method="post" action="">';
+		$html .= '<input type="hidden" name="token" value="' . Tools::safeOutput(Tools::getAdminTokenLite('AdminModules')) . '">';
 		$html .= '<button type="submit" name="submitAneepayTest" value="1" class="btn btn-default"' . ($has_id ? '' : ' disabled') . '>';
 		$html .= '<i class="icon-refresh"></i> ' . $this->l('Test connection') . '</button>';
 		$html .= ' <span class="help-block" style="display:inline-block;margin-left:8px;">' . $this->l('Calls GET /accounts/{id}/payments to verify the Account ID, domain and mode.') . '</span>';
@@ -571,6 +618,7 @@ class Ps_Aneepay extends PaymentModule {
 		}
 
 		$html .= '<form method="post" action="" style="margin-top:8px;">';
+		$html .= '<input type="hidden" name="token" value="' . Tools::safeOutput(Tools::getAdminTokenLite('AdminModules')) . '">';
 		$html .= '<button type="submit" name="submitAneepayRefreshLog" value="1" class="btn btn-default btn-sm"><i class="icon-refresh"></i> ' . $this->l('Refresh') . '</button> ';
 
 		if (!empty($logs)) {
@@ -585,11 +633,14 @@ class Ps_Aneepay extends PaymentModule {
 	}
 
 	protected function renderEndpoints() {
+		$cron_url = $this->moduleLink('cron');
+		$cron_url .= (false === strpos($cron_url, '?') ? '?' : '&') . 'secret=' . urlencode($this->cronSecret());
+
 		$rows = array(
 			array($this->l('STATUS_URL (webhook)'), $this->moduleLink('webhook'), $this->l('AneePay pushes the transaction result here to keep order statuses in sync.')),
 			array($this->l('SUCCESS_URL'), $this->moduleLink('success'), $this->l('Customers land here after a successful payment.')),
 			array($this->l('FAIL_URL'), $this->moduleLink('fail'), $this->l('Customers land here when the payment is cancelled or fails.')),
-			array($this->l('Cron URL'), $this->moduleLink('cron'), $this->l('Optional: poll pending payments on a schedule.')),
+			array($this->l('Cron URL'), $cron_url, $this->l('Optional: poll pending payments on a schedule. The secret is required.')),
 		);
 
 		$html  = '<div class="panel"><div class="panel-heading"><i class="icon-link"></i> ' . $this->l('Set these URLs in the AneePay account panel:') . '</div><div class="panel-body">';
@@ -639,6 +690,7 @@ class Ps_Aneepay extends PaymentModule {
 			'ANEEPAY_ACCOUNT_ID'      => trim((string) Tools::getValue('ANEEPAY_ACCOUNT_ID')),
 			'ANEEPAY_WEBHOOK_SECRET'  => (string) Tools::getValue('ANEEPAY_WEBHOOK_SECRET'),
 			'ANEEPAY_SITE_DOMAIN'     => (string) Tools::getValue('ANEEPAY_SITE_DOMAIN'),
+			'ANEEPAY_KEEP_DATA'       => Tools::getValue('ANEEPAY_KEEP_DATA') ? '1' : '0',
 			'ANEEPAY_TOKEN'           => (string) Tools::getValue('ANEEPAY_TOKEN'),
 			'ANEEPAY_NETWORK'         => (string) Tools::getValue('ANEEPAY_NETWORK'),
 			'ANEEPAY_RATE_SOURCE'     => (string) Tools::getValue('ANEEPAY_RATE_SOURCE'),
@@ -716,6 +768,17 @@ class Ps_Aneepay extends PaymentModule {
 					'label'    => $this->l('Domain'),
 					'name'     => 'ANEEPAY_SITE_DOMAIN',
 					'desc'     => $this->l('Your verified merchant domain (Origin header). Empty = use your shop host.'),
+				),
+				array(
+					'type'     => 'switch',
+					'label'    => $this->l('Keep data on uninstall'),
+					'name'     => 'ANEEPAY_KEEP_DATA',
+					'is_bool'  => true,
+					'values'   => array(
+						array('id' => 'keep_on', 'value' => 1, 'label' => $this->l('Keep')),
+						array('id' => 'keep_off', 'value' => 0, 'label' => $this->l('Delete')),
+					),
+					'desc'     => $this->l('Keep orders and logs in the database when the module is uninstalled. Disable to delete them.'),
 				),
 				array(
 					'type'     => 'switch',
@@ -833,6 +896,7 @@ class Ps_Aneepay extends PaymentModule {
 		$helper->fields_value = array(
 			'ANEEPAY_ACCOUNT_ID'      => Tools::getValue('ANEEPAY_ACCOUNT_ID', (string) Configuration::get('ANEEPAY_ACCOUNT_ID')),
 			'ANEEPAY_SITE_DOMAIN'     => (string) Configuration::get('ANEEPAY_SITE_DOMAIN'),
+			'ANEEPAY_KEEP_DATA'       => ('' === (string) Configuration::get('ANEEPAY_KEEP_DATA')) ? true : (bool) Configuration::get('ANEEPAY_KEEP_DATA'),
 			'ANEEPAY_TEST_MODE'       => (bool) Configuration::get('ANEEPAY_TEST_MODE'),
 			'ANEEPAY_TOKEN'           => (string) Configuration::get('ANEEPAY_TOKEN', 'usdt'),
 			'ANEEPAY_NETWORK'         => (string) Configuration::get('ANEEPAY_NETWORK', 'polygon'),
@@ -844,8 +908,6 @@ class Ps_Aneepay extends PaymentModule {
 			'ANEEPAY_FAILED_STATE'    => (int) Configuration::get('ANEEPAY_FAILED_STATE'),
 			'ANEEPAY_CANCELLED_STATE' => (int) Configuration::get('ANEEPAY_CANCELLED_STATE'),
 		);
-
-		$output = $helper->generateForm($fields);
 
 		return $helper->generateForm($fields);
 	}

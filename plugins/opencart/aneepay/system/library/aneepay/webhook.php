@@ -135,6 +135,9 @@ class AneePay_Webhook {
 
 		$status_id = isset($this->status_map[$status]) ? (int) $this->status_map[$status] : 0;
 
+		$order_info = $registry->get('model_checkout_order')->getOrder($order_id);
+		$old_status = ($order_info && isset($order_info['order_status_id'])) ? (int) $order_info['order_status_id'] : 0;
+
 		if ($status_id > 0) {
 			$registry->get('model_checkout_order')->addOrderHistory($order_id, $status_id, $note, true);
 		}
@@ -143,11 +146,33 @@ class AneePay_Webhook {
 
 		// Restore reserved stock on failure/cancellation exactly once.
 		if (in_array($status, array('failed', 'cancelled'), true) && !$model->isStockRestored($order_id)) {
-			$this->restore_stock($order_id);
+			$reserving = $this->order_reserving_statuses();
+			$native_restock = $status_id > 0
+				&& in_array($old_status, $reserving, true)
+				&& !in_array($status_id, $reserving, true);
+
+			if (!$native_restock && in_array($old_status, $reserving, true)) {
+				$this->restore_stock($order_id);
+			}
+
 			$model->markStockRestored($order_id);
 		}
 
 		return true;
+	}
+
+	/**
+	 * Order statuses that reserve stock (OC's processing + complete sets).
+	 *
+	 * @return array
+	 */
+	protected function order_reserving_statuses() {
+		$config = $this->registry->get('config');
+
+		return array_values(array_unique(array_merge(
+			(array) $config->get('config_processing_status'),
+			(array) $config->get('config_complete_status')
+		)));
 	}
 
 	/**
@@ -165,10 +190,25 @@ class AneePay_Webhook {
 		$order_products = $registry->get('model_sale_order')->getOrderProducts($order_id);
 
 		foreach ($order_products as $product) {
+			$quantity = (int) $product['quantity'];
+
+			if ($quantity <= 0) {
+				continue;
+			}
+
 			$registry->get('db')->query(
-				"UPDATE `" . DB_PREFIX . "product` SET `quantity` = `quantity` + " . (int) $product['quantity'] .
-				" WHERE `product_id` = " . (int) $product['product_id']
+				"UPDATE `" . DB_PREFIX . "product` SET `quantity` = `quantity` + " . $quantity .
+				" WHERE `product_id` = " . (int) $product['product_id'] . " AND `subtract` = '1'"
 			);
+
+			$order_options = $registry->get('model_sale_order')->getOrderOptions($order_id, (int) $product['order_product_id']);
+
+			foreach ($order_options as $order_option) {
+				$registry->get('db')->query(
+					"UPDATE `" . DB_PREFIX . "product_option_value` SET `quantity` = `quantity` + " . $quantity .
+					" WHERE `product_option_value_id` = " . (int) $order_option['product_option_value_id'] . " AND `subtract` = '1'"
+				);
+			}
 		}
 	}
 

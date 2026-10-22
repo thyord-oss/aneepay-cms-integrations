@@ -12,15 +12,15 @@
 		{/if}
 
 		{if $payment_id}
-			<p>{l s='AneePay payment id' mod='ps_aneepay'}: <strong>{$payment_id}</strong></p>
+			<p>{l s='AneePay payment id' mod='ps_aneepay'}: <strong>{$payment_id|escape:'html':'UTF-8'}</strong></p>
 		{/if}
 
 		{if $token}
-			<p>{l s='You pay' mod='ps_aneepay'}: <strong>{$pay_now}</strong></p>
+			<p>{l s='You pay' mod='ps_aneepay'}: <strong>{$pay_now|escape:'html':'UTF-8'}</strong></p>
 		{/if}
 
 		{if $order_id}
-			<a href="{$check_url}&amp;id_order={$order_id}" class="btn btn-primary" id="aneepay-i-paid">
+			<a href="{$check_url|escape:'html':'UTF-8'}&amp;id_order={$order_id}" class="btn btn-primary" id="aneepay-i-paid">
 				{l s='I already paid' mod='ps_aneepay'}
 			</a>
 		{/if}
@@ -29,22 +29,22 @@
 		<h2>{l s='Payment not completed' mod='ps_aneepay'}</h2>
 
 		{if $checkout_url}
-			<p><a href="{$checkout_url}" class="btn btn-primary">{l s='Try again' mod='ps_aneepay'}</a></p>
+			<p><a href="{$checkout_url|escape:'html':'UTF-8'}" class="btn btn-primary">{l s='Try again' mod='ps_aneepay'}</a></p>
 		{/if}
 	{/if}
 
-	<p><a href="{$shop_url}">{l s='Back to shop' mod='ps_aneepay'}</a></p>
+	<p><a href="{$shop_url|escape:'html':'UTF-8'}">{l s='Back to shop' mod='ps_aneepay'}</a></p>
 </div>
 
 {if $is_success && $order_id}
 <script>
 (function () {
-	var url = '{$check_url}&amp;id_order={$order_id}';
+	var url = '{$check_url|escape:'javascript'}&id_order={$order_id}';
 	var btn = document.getElementById('aneepay-i-paid');
 	function poll() {
 		var b = new URLSearchParams();
 		b.append('id_order', {$order_id});
-		fetch('{$check_url}', {
+		fetch('{$check_url|escape:'javascript'}', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
 			body: b.toString()

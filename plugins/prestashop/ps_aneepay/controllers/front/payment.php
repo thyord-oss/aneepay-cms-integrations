@@ -71,7 +71,7 @@ class Ps_AneepayPaymentModuleFrontController extends ModuleFrontController {
 		$id_order = (int) $this->module->currentOrder;
 
 		if ($id_order <= 0) {
-			$this->redirectWithNotice($home, 'error', 'Unable to create the order. Please try again.');
+			$this->redirectWithNotice($home, 'error', $this->module->l('Unable to create the order. Please try again.'));
 
 			return;
 		}
@@ -83,20 +83,23 @@ class Ps_AneepayPaymentModuleFrontController extends ModuleFrontController {
 			$converter = new AneePayUsdConverter($api);
 			$converted = $converter->convert($total, (string) $currency->iso_code);
 			$created   = $api->create_payment($converted['token_amount'], 'Order #' . $id_order);
-		} catch (Exception $e) {
+		} catch (Throwable $e) {
 			// Compensate: the order exists but no payment does — cancel it and
 			// release the stock validateOrder() just reserved.
 			$cancelledState = (int) Configuration::get('ANEEPAY_CANCELLED_STATE');
+			$cancel_order   = new Order($id_order);
+			$previous_state = Validate::isLoadedObject($cancel_order) ? (int) $cancel_order->getCurrentState() : 0;
 
-			if ($cancelledState > 0) {
+			if ($cancelledState > 0 && Validate::isLoadedObject($cancel_order)) {
 				$history           = new OrderHistory();
 				$history->id_order = $id_order;
 
-				$history->changeIdOrderState($cancelledState, new Order($id_order), true);
+				$history->changeIdOrderState($cancelledState, $cancel_order, true);
 				$history->add();
 			}
 
-			AneePayWebhook::restoreOrderStock($id_order);
+			AneePayWebhook::restoreOrderStockIfNeeded($id_order, $cancelledState, $previous_state);
+			$order_model->markStockRestored($id_order);
 
 			$this->redirectWithNotice($home, 'error', $e->getMessage());
 

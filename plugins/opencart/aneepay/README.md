@@ -27,7 +27,7 @@ install.xml                                            # ocmod manifest (add-on 
 - `status_url` (webhook) — `index.php?route=extension/payment/aneepay/callback`
 - `success_url` — `index.php?route=extension/payment/aneepay/success`
 - `fail_url` — `index.php?route=extension/payment/aneepay/fail`
-- polling — `index.php?route=extension/payment/aneepay/cron` (schedule it in cron)
+- polling — `index.php?route=extension/payment/aneepay/cron&secret=<cron_secret>` (schedule it in cron; the secret is shown on the settings page)
 
 ## Notes
 
@@ -40,3 +40,7 @@ install.xml                                            # ocmod manifest (add-on 
 - Order metadata is stored in the `aneepay_order` table; the webhook resolves the
   order by `payment_id` / `operation_id` (128-bit int, kept exact) or `Order #N`.
 - Cron is not built into OpenCart: add the cron URL above to your server crontab.
+- Uninstall keeps the `aneepay_order` / `aneepay_log` tables by default; set
+  "On uninstall" to "Delete data" in the settings to drop them.
+- The admin page upgrades an existing `aneepay_order` table in place (adds
+  `stock_restored`), so no manual SQL is needed after updating.

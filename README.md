@@ -17,8 +17,7 @@ packaged into a separate artifact.
 | OpenCart 3.x     | [`plugins/opencart/aneepay`](plugins/opencart/aneepay)           | `./scripts/pack.sh oc` | `dist/oc/aneepay-<ver>.ocmod.zip` | [`docs/ROADMAP-OPENCART.md`](docs/ROADMAP-OPENCART.md)     |
 | PrestaShop 1.7/8 | [`plugins/prestashop/ps_aneepay`](plugins/prestashop/ps_aneepay) | `./scripts/pack.sh ps` | `dist/ps/ps_aneepay.zip`          | [`docs/ROADMAP-PRESTASHOP.md`](docs/ROADMAP-PRESTASHOP.md) |
 
-Status: WooCommerce is a working implementation; OpenCart and PrestaShop are
-skeletons (structure per the matching ROADMAP, implementation not started).
+Status: all three plugins are working implementations.
 
 ## Build
 
@@ -48,9 +47,16 @@ docker compose up --build
 # OpenCart: http://localhost:8082  (admin / admin)
 ```
 
-Each container bind-mounts (WooCommerce) or installs (OpenCart) the matching
-plugin, so changes are picked up with a rebuild. PrestaShop stands are added the
-same way as it is implemented (see `docs/ROADMAP-PRESTASHOP.md`).
+Each container bind-mounts (WooCommerce) or installs (OpenCart, PrestaShop) the
+matching plugin, so changes are picked up with a rebuild.
+
+### PrestaShop
+
+```bash
+cd docker/prestashop
+docker compose up --build
+# PrestaShop: http://localhost:8084  (admin / admin)
+```
 
 ## Structure
 
@@ -60,10 +66,10 @@ same way as it is implemented (see `docs/ROADMAP-PRESTASHOP.md`).
 ├── docs/                              # INTEGRATION.md + ROADMAPs (local, not tracked)
 ├── plugins/
 │   ├── woocommerce/aneepay/           # WC plugin (PHP)
-│   ├── opencart/aneepay/              # OC extension (skeleton)
-│   └── prestashop/ps_aneepay/         # PS module (skeleton)
+│   ├── opencart/aneepay/              # OC extension (PHP)
+│   └── prestashop/ps_aneepay/         # PS module (PHP)
 ├── scripts/pack.sh                    # build / package artifacts
-├── docker/                            # local test shops (woocommerce/, opencart/)
+├── docker/                            # local test shops (woocommerce/, opencart/, prestashop/)
 └── .github/workflows/release.yml      # CI: lint + package + release
 ```
 

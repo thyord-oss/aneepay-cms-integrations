@@ -441,11 +441,21 @@ class ControllerExtensionPaymentAneePay extends Controller {
 		$this->load->model('extension/payment/aneepay');
 		$this->load->model('checkout/order');
 
+		$expected = (string) $this->config->get('payment_aneepay_cron_secret');
+		$provided = isset($this->request->get['secret']) ? (string) $this->request->get['secret'] : '';
+
+		if ('' === $expected || '' === $provided || !hash_equals($expected, $provided)) {
+			$this->response->addHeader('HTTP/1.1 403 Forbidden');
+			return 'forbidden';
+		}
+
 		if ($this->cache->get('aneepay_cron_lock')) {
 			return 'locked';
 		}
 
 		$this->cache->set('aneepay_cron_lock', 1, 300);
+
+		$client = null;
 
 		try {
 			$client  = $this->client();
@@ -466,8 +476,12 @@ class ControllerExtensionPaymentAneePay extends Controller {
 
 				$webhook->apply($order_id, (string) $data['status']);
 			}
-		} catch (Exception $e) {
-			$client->write_log('cron', $e->getMessage(), 'error');
+		} catch (Throwable $e) {
+			if ($client instanceof AneePay_Client) {
+				$client->write_log('cron', $e->getMessage(), 'error');
+			} else {
+				error_log('AneePay cron: ' . $e->getMessage());
+			}
 		} finally {
 			$this->cache->delete('aneepay_cron_lock');
 		}
@@ -533,17 +547,29 @@ class ControllerExtensionPaymentAneePay extends Controller {
 			}
 		}
 
-		$client = $this->client();
-		$data   = $client->get_payment((string) $mapping['payment_id']);
+		$client = null;
 
-		if (null === $data || empty($data['status'])) {
+		try {
+			$client = $this->client();
+			$data   = $client->get_payment((string) $mapping['payment_id']);
+
+			if (null === $data || empty($data['status'])) {
+				$this->response->setOutput(json_encode(array('status' => (string) $mapping['payment_status'])));
+				return;
+			}
+
+			$webhook = new AneePay_Webhook($this->registry, $client, $this->status_map());
+			$webhook->apply($order_id, (string) $data['status']);
+
+			$this->response->setOutput(json_encode(array('status' => (string) $data['status'])));
+		} catch (Throwable $e) {
+			if ($client instanceof AneePay_Client) {
+				$client->write_log('check', $e->getMessage(), 'error');
+			} else {
+				error_log('AneePay check: ' . $e->getMessage());
+			}
+
 			$this->response->setOutput(json_encode(array('status' => (string) $mapping['payment_status'])));
-			return;
 		}
-
-		$webhook = new AneePay_Webhook($this->registry, $client, $this->status_map());
-		$webhook->apply($order_id, (string) $data['status']);
-
-		$this->response->setOutput(json_encode(array('status' => (string) $data['status'])));
 	}
 }

@@ -33,7 +33,18 @@ class ControllerExtensionPaymentAneePay extends Controller {
 		$this->load->model('extension/payment/aneepay');
 		$this->load_lib();
 
+		$cron_secret = (string) $this->config->get('payment_aneepay_cron_secret');
+
+		if ('' === $cron_secret) {
+			$cron_secret = bin2hex(random_bytes(16));
+			$this->model_extension_payment_aneepay->setSetting('payment_aneepay_cron_secret', $cron_secret);
+		}
+
+		$this->model_extension_payment_aneepay->ensureSchema();
+
 		if ($this->request->server['REQUEST_METHOD'] == 'POST' && $this->validate()) {
+			$this->request->post['payment_aneepay_cron_secret'] = $cron_secret;
+
 			$this->model_setting_setting->editSetting('payment_aneepay', $this->request->post);
 
 			$this->session->data['success'] = $this->language->get('text_success');
@@ -51,7 +62,7 @@ class ControllerExtensionPaymentAneePay extends Controller {
 			'status', 'title', 'description', 'account_id', 'webhook_secret', 'site_domain',
 			'test_mode', 'token', 'network', 'rate_source', 'exchange_rate',
 			'pending_status_id', 'paid_status_id', 'failed_status_id', 'cancelled_status_id',
-			'debug', 'cron_interval', 'fee_rule',
+			'debug', 'cron_interval', 'fee_rule', 'keep_data',
 		);
 
 		foreach ($fields as $field) {
@@ -81,6 +92,10 @@ class ControllerExtensionPaymentAneePay extends Controller {
 
 		if ('' === $data['payment_aneepay_fee_rule']) {
 			$data['payment_aneepay_fee_rule'] = 'merchant';
+		}
+
+		if ('' === (string) $data['payment_aneepay_keep_data']) {
+			$data['payment_aneepay_keep_data'] = '1';
 		}
 
 		if ('' == $data['payment_aneepay_pending_status_id']) {
@@ -132,7 +147,7 @@ class ControllerExtensionPaymentAneePay extends Controller {
 		$data['status_url']     = $catalog_root . 'index.php?route=extension/payment/aneepay/callback';
 		$data['success_url']    = $catalog_root . 'index.php?route=extension/payment/aneepay/success';
 		$data['fail_url']       = $catalog_root . 'index.php?route=extension/payment/aneepay/fail';
-		$data['cron_url']       = $catalog_root . 'index.php?route=extension/payment/aneepay/cron';
+		$data['cron_url']       = $catalog_root . 'index.php?route=extension/payment/aneepay/cron&secret=' . rawurlencode($cron_secret);
 
 		$data['mode_label'] = $data['sandbox'] ? $this->language->get('text_sandbox') : $this->language->get('text_live');
 		$data['mode_class'] = $data['sandbox'] ? 'label-warning' : 'label-success';

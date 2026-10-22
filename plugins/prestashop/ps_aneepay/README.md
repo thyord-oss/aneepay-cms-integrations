@@ -29,7 +29,7 @@ ps_aneepay/
 - `status_url` — `index.php?fc=module&module=ps_aneepay&controller=webhook`
 - `success_url` — `index.php?fc=module&module=ps_aneepay&controller=success`
 - `fail_url` — `index.php?fc=module&module=ps_aneepay&controller=fail`
-- polling — `index.php?fc=module&module=ps_aneepay&controller=cron`
+- polling — `index.php?fc=module&module=ps_aneepay&controller=cron&secret=<cron_secret>` (the secret is shown on the settings page)
 
 ## Notes
 
@@ -44,3 +44,7 @@ ps_aneepay/
 - Order metadata is stored in the `ps_aneepay_order` table; the webhook resolves
   the order by `payment_id` / `operation_id` (128-bit int, kept exact) or `#N`.
 - PrestaShop has no built-in cron: add the cron URL above to your server crontab.
+- Uninstall keeps the `ps_aneepay_order` / `ps_aneepay_log` tables by default;
+  disable "Keep data on uninstall" in the settings to drop them.
+- Upgrading from 1.1.x runs `upgrade/upgrade-1.2.0.php`, which adds the
+  `stock_restored` column automatically.

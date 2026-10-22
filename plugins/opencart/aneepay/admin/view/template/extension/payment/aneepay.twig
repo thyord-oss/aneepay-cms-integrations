@@ -267,6 +267,22 @@
           </div>
 
           <div class="form-group">
+            <label class="col-sm-2 control-label" for="input-keep-data">{{ entry_keep_data }}</label>
+            <div class="col-sm-10">
+              <select name="payment_aneepay_keep_data" id="input-keep-data" class="form-control">
+                {% if payment_aneepay_keep_data == '1' %}
+                <option value="1" selected="selected">{{ text_keep_data }}</option>
+                <option value="0">{{ text_delete_data }}</option>
+                {% else %}
+                <option value="1">{{ text_keep_data }}</option>
+                <option value="0" selected="selected">{{ text_delete_data }}</option>
+                {% endif %}
+              </select>
+              <div class="help-block">{{ help_keep_data }}</div>
+            </div>
+          </div>
+
+          <div class="form-group">
             <div class="col-sm-10 col-sm-offset-2">
               <button type="button" id="aneepay-toggle-logs" class="btn btn-default" data-url="{{ logs_url }}">{{ button_logs }}</button>
               <button type="button" id="aneepay-clear-logs" class="btn btn-default" style="display:none;" data-url="{{ clear_url }}">{{ button_clear }}</button>

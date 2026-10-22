@@ -43,6 +43,44 @@ class ModelExtensionPaymentAneePay extends Model {
 			PRIMARY KEY (`log_id`),
 			KEY `date_added` (`date_added`)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+		$this->ensureSchema();
+	}
+
+	/**
+	 * Bring an existing installation up to the current schema.
+	 *
+	 * @return void
+	 */
+	public function ensureSchema() {
+		$table = DB_PREFIX . 'aneepay_order';
+
+		$exists = $this->db->query("SHOW TABLES LIKE '" . $this->db->escape($table) . "'");
+
+		if (!$exists->num_rows) {
+			return;
+		}
+
+		$column = $this->db->query("SHOW COLUMNS FROM `" . $table . "` LIKE 'stock_restored'");
+
+		if (!$column->num_rows) {
+			$this->db->query("ALTER TABLE `" . $table . "` ADD COLUMN `stock_restored` TINYINT(1) NOT NULL DEFAULT 0");
+		}
+	}
+
+	/**
+	 * Persist a single payment setting without touching the others.
+	 *
+	 * OpenCart's editSetting() deletes every row for the code first, so it
+	 * cannot be used to update one value (e.g. the generated cron secret).
+	 *
+	 * @param string $key   Setting key.
+	 * @param string $value Setting value.
+	 * @return void
+	 */
+	public function setSetting($key, $value) {
+		$this->db->query("DELETE FROM `" . DB_PREFIX . "setting` WHERE `store_id` = '0' AND `code` = 'payment_aneepay' AND `key` = '" . $this->db->escape($key) . "'");
+		$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `store_id` = '0', `code` = 'payment_aneepay', `key` = '" . $this->db->escape($key) . "', `value` = '" . $this->db->escape($value) . "', `serialized` = '0'");
 	}
 
 	/**
