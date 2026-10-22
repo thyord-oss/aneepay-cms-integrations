@@ -141,7 +141,35 @@ class AneePay_Webhook {
 
 		$model->updatePaymentStatus($order_id, $status);
 
+		// Restore reserved stock on failure/cancellation exactly once.
+		if (in_array($status, array('failed', 'cancelled'), true) && !$model->isStockRestored($order_id)) {
+			$this->restore_stock($order_id);
+			$model->markStockRestored($order_id);
+		}
+
 		return true;
+	}
+
+	/**
+	 * Add the order's product quantities back to stock (mirrors OC's own
+	 * reduction in model_checkout_order::addOrderHistory).
+	 *
+	 * @param int $order_id Order id.
+	 * @return void
+	 */
+	protected function restore_stock($order_id) {
+		$registry = $this->registry;
+
+		$registry->get('load')->model('sale/order');
+
+		$order_products = $registry->get('model_sale_order')->getOrderProducts($order_id);
+
+		foreach ($order_products as $product) {
+			$registry->get('db')->query(
+				"UPDATE `" . DB_PREFIX . "product` SET `quantity` = `quantity` + " . (int) $product['quantity'] .
+				" WHERE `product_id` = " . (int) $product['product_id']
+			);
+		}
 	}
 
 	/**

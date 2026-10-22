@@ -61,6 +61,7 @@ class Ps_Aneepay extends PaymentModule {
 			`usd_amount` VARCHAR(32) NOT NULL DEFAULT \'\',
 			`fiat_per_usd` VARCHAR(32) NOT NULL DEFAULT \'\',
 			`rate_source` VARCHAR(16) NOT NULL DEFAULT \'\',
+			`stock_restored` TINYINT(1) NOT NULL DEFAULT 0,
 			`date_added` DATETIME NOT NULL,
 			PRIMARY KEY (`id`),
 			KEY `id_order` (`id_order`),

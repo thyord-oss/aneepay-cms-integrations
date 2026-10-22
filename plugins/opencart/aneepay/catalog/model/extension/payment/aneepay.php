@@ -84,6 +84,28 @@ class ModelExtensionPaymentAneePay extends Model {
 	}
 
 	/**
+	 * Whether stock was already restored for the order (idempotency guard).
+	 *
+	 * @param int $order_id Order id.
+	 * @return bool
+	 */
+	public function isStockRestored($order_id) {
+		$query = $this->db->query("SELECT `stock_restored` FROM `" . DB_PREFIX . "aneepay_order` WHERE `order_id` = '" . (int) $order_id . "' LIMIT 1");
+
+		return $query->num_rows && !empty($query->row['stock_restored']);
+	}
+
+	/**
+	 * Mark stock as restored so a later failed/cancelled event cannot double-restore.
+	 *
+	 * @param int $order_id Order id.
+	 * @return void
+	 */
+	public function markStockRestored($order_id) {
+		$this->db->query("UPDATE `" . DB_PREFIX . "aneepay_order` SET `stock_restored` = 1 WHERE `order_id` = '" . (int) $order_id . "'");
+	}
+
+	/**
 	 * All orders still awaiting a hosted payment (for the cron poller).
 	 *
 	 * @return array<int> Order ids.

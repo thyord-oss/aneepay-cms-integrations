@@ -76,6 +76,30 @@ class AneePayOrder {
 		return (bool) Db::getInstance()->update(self::TABLE, array('payment_status' => pSQL((string) $status)), 'id_order = ' . (int) $id_order);
 	}
 
+	/**
+	 * Whether stock was already restored for the order (idempotency guard).
+	 *
+	 * @param int $id_order Order id.
+	 * @return bool
+	 */
+	public function isStockRestored($id_order) {
+		$row = Db::getInstance()->getRow(
+			'SELECT `stock_restored` FROM `' . _DB_PREFIX_ . self::TABLE . '` WHERE `id_order` = ' . (int) $id_order
+		);
+
+		return $row && !empty($row['stock_restored']);
+	}
+
+	/**
+	 * Mark stock as restored so a later failed/cancelled event cannot double-restore.
+	 *
+	 * @param int $id_order Order id.
+	 * @return bool
+	 */
+	public function markStockRestored($id_order) {
+		return (bool) Db::getInstance()->update(self::TABLE, array('stock_restored' => 1), 'id_order = ' . (int) $id_order);
+	}
+
 	/** @return array<int> */
 	public function getPendingOrderIds() {
 		$db  = Db::getInstance();
