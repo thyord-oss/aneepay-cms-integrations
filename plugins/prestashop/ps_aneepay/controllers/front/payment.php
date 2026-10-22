@@ -20,7 +20,7 @@ class Ps_AneepayPaymentModuleFrontController extends ModuleFrontController {
 
 		$order_model = new AneePayOrder();
 
-		// Idempotency gate: reuse an existing pending hosted payment.
+		// Idempotency gate: reuse an existing pending hosted payment for this cart.
 		$existing = $order_model->getByCart((int) $cart->id);
 		if ($existing && !empty($existing['checkout_url']) && in_array((string) $existing['payment_status'], array('', 'pending'), true)) {
 			$this->context->cookie->__set('aneepay_order_id', (int) $existing['id_order'], time() + 3600);
@@ -30,6 +30,21 @@ class Ps_AneepayPaymentModuleFrontController extends ModuleFrontController {
 			return;
 		}
 
+		// Idempotency gate 2: the cookie may point at a pending order started
+		// before the cart was consumed (e.g. retry from the fail page). Reuse
+		// its hosted payment instead of creating a duplicate order + payment.
+		$cookie_order = isset($this->context->cookie->aneepay_order_id) ? (int) $this->context->cookie->aneepay_order_id : 0;
+
+		if ($cookie_order > 0) {
+			$by_cookie = $order_model->getByOrder($cookie_order);
+
+			if ($by_cookie && !empty($by_cookie['checkout_url']) && in_array((string) $by_cookie['payment_status'], array('', 'pending'), true)) {
+				$this->renderPending($by_cookie);
+
+				return;
+			}
+		}
+
 		$total    = (float) $cart->getOrderTotal(true, Cart::BOTH);
 		$currency = new Currency((int) $cart->id_currency);
 
@@ -37,20 +52,8 @@ class Ps_AneepayPaymentModuleFrontController extends ModuleFrontController {
 			Tools::redirect($home);
 		}
 
-		$api = $this->module->getApi();
-		$api->set_config('store_rate', $this->module->getStoreRate((string) $currency->iso_code));
-
-		try {
-			$converter = new AneePayUsdConverter($api);
-			$converted = $converter->convert($total, (string) $currency->iso_code);
-			$created   = $api->create_payment($converted['token_amount'], 'Order #' . (int) $cart->id);
-		} catch (Exception $e) {
-			$this->redirectWithNotice($home, 'error', $e->getMessage());
-
-			return;
-		}
-
-		// Create the order (pending) and capture its id/reference.
+		// Create the order FIRST so the payment references the real order id
+		// and a failed validateOrder() cannot leave an orphan payment behind.
 		$pendingState = (int) Configuration::get('ANEEPAY_PENDING_STATE');
 
 		$this->module->validateOrder(
@@ -66,6 +69,39 @@ class Ps_AneepayPaymentModuleFrontController extends ModuleFrontController {
 		);
 
 		$id_order = (int) $this->module->currentOrder;
+
+		if ($id_order <= 0) {
+			$this->redirectWithNotice($home, 'error', 'Unable to create the order. Please try again.');
+
+			return;
+		}
+
+		$api = $this->module->getApi();
+		$api->set_config('store_rate', $this->module->getStoreRate((string) $currency->iso_code));
+
+		try {
+			$converter = new AneePayUsdConverter($api);
+			$converted = $converter->convert($total, (string) $currency->iso_code);
+			$created   = $api->create_payment($converted['token_amount'], 'Order #' . $id_order);
+		} catch (Exception $e) {
+			// Compensate: the order exists but no payment does — cancel it and
+			// release the stock validateOrder() just reserved.
+			$cancelledState = (int) Configuration::get('ANEEPAY_CANCELLED_STATE');
+
+			if ($cancelledState > 0) {
+				$history           = new OrderHistory();
+				$history->id_order = $id_order;
+
+				$history->changeIdOrderState($cancelledState, new Order($id_order), true);
+				$history->add();
+			}
+
+			AneePayWebhook::restoreOrderStock($id_order);
+
+			$this->redirectWithNotice($home, 'error', $e->getMessage());
+
+			return;
+		}
 
 		$mapping = array(
 			'id_cart'        => (int) $cart->id,

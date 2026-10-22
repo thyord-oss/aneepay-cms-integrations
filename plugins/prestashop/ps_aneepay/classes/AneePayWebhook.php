@@ -141,7 +141,7 @@ class AneePayWebhook {
 
 		// Restore reserved stock on failure/cancellation exactly once.
 		if (in_array($status, array('failed', 'cancelled'), true) && !$this->order_model->isStockRestored($id_order)) {
-			$this->restoreStock((int) $id_order);
+			self::restoreOrderStock((int) $id_order);
 			$this->order_model->markStockRestored($id_order);
 		}
 
@@ -154,7 +154,7 @@ class AneePayWebhook {
 	 * @param int $id_order Order id.
 	 * @return void
 	 */
-	protected function restoreStock($id_order) {
+	public static function restoreOrderStock($id_order) {
 		$order = new Order($id_order);
 
 		if (!Validate::isLoadedObject($order)) {
@@ -164,9 +164,9 @@ class AneePayWebhook {
 		$products = $order->getProducts();
 
 		foreach ($products as $product) {
-			$id_product        = (int) $product['product_id'];
+			$id_product           = (int) $product['product_id'];
 			$id_product_attribute = (int) $product['product_attribute_id'];
-			$quantity          = (int) $product['product_quantity'];
+			$quantity             = (int) $product['product_quantity'];
 
 			if ($id_product <= 0 || $quantity <= 0) {
 				continue;
