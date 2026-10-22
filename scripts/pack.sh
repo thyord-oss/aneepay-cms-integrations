@@ -109,8 +109,31 @@ build_ps() {
   dest="$DIST/ps"; mkdir -p "$dest"
   mkdir -p "$stage/ps_aneepay"
   cp -a "$SRC_PS/." "$stage/ps_aneepay/"
+  # config.xml is gitignored (**/config.xml): generate it from the canonical
+  # VERSION so a fresh checkout always ships a matching module manifest. The
+  # write happens after the copy so it wins over any stale local copy.
+  write_ps_config "$stage/ps_aneepay/config.xml"
   zip_stage "$stage" "$dest/ps_aneepay.zip"
   echo "   -> $dest/ps_aneepay.zip"
+}
+
+# Generate the PrestaShop module manifest (config.xml) at the build version.
+write_ps_config() {
+  local out="$1"
+  cat > "$out" <<EOF
+<?xml version="1.0" encoding="UTF-8" ?>
+<module>
+    <name>ps_aneepay</name>
+    <displayName><![CDATA[AneePay Crypto Gateway]]></displayName>
+    <version><![CDATA[${VERSION}]]></version>
+    <description><![CDATA[Accept stablecoin payments (USDT, USDC, DAI) on Polygon (live) or Amoy (testnet). Non-custodial, 0.5% fee, no KYC.]]></description>
+    <author><![CDATA[AneePay]]></author>
+    <tab><![CDATA[payments_gateways]]></tab>
+    <confirmUninstall><![CDATA[Are you sure you want to uninstall AneePay?]]></confirmUninstall>
+    <is_configurable>1</is_configurable>
+    <need_instance>0</need_instance>
+</module>
+EOF
 }
 
 # ---------------------------------------------------------------------------

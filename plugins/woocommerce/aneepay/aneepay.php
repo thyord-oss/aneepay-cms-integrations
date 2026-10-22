@@ -3,7 +3,7 @@
  * Plugin Name: AneePay Crypto Gateway for WooCommerce
  * Plugin URI:  https://aneepay.com/
  * Description: Accept stablecoin crypto payments (USDT, USDC, DAI) on Polygon & Amoy testnet via the non-custodial AneePay gateway. Compatible with HPOS (High-Performance Order Storage).
- * Version:     1.1.0
+ * Version:     1.2.0
  * Author:      AneePay
  * Author URI:  https://aneepay.com/
  * License:     MIT
@@ -21,7 +21,7 @@
 defined( 'ABSPATH' ) || exit;
 
 if ( ! defined( 'ANEEPAY_VERSION' ) ) {
-	define( 'ANEEPAY_VERSION', '1.1.0' );
+	define( 'ANEEPAY_VERSION', '1.2.0' );
 }
 
 if ( ! defined( 'ANEEPAY_PLUGIN_FILE' ) ) {
