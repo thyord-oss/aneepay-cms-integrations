@@ -41,6 +41,19 @@ class Ps_Aneepay extends PaymentModule {
 		return $this->uninstallDb() && parent::uninstall();
 	}
 
+	/**
+	 * Whether order/log data should be preserved on uninstall.
+	 *
+	 * Preserved data can be inspected or migrated after the module is removed;
+	 * the tables are only dropped when the merchant opts in to deletion via the
+	 * ANEEPAY_KEEP_DATA configuration value set to '0'.
+	 *
+	 * @return bool
+	 */
+	public function keepDataOnUninstall() {
+		return (string) Configuration::get('ANEEPAY_KEEP_DATA') !== '0';
+	}
+
 	public function installDb() {
 		$sql = array();
 
@@ -89,6 +102,12 @@ class Ps_Aneepay extends PaymentModule {
 	}
 
 	public function uninstallDb() {
+		// Preserve order/log data by default so a reinstall or audit can still
+		// read it. The DROP only runs when the merchant opts in to deletion.
+		if ($this->keepDataOnUninstall()) {
+			return true;
+		}
+
 		Db::getInstance()->execute('DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'aneepay_order`');
 		Db::getInstance()->execute('DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'aneepay_log`');
 

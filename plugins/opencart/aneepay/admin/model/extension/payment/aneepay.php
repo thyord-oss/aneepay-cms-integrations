@@ -51,6 +51,13 @@ class ModelExtensionPaymentAneePay extends Model {
 	 * @return void
 	 */
 	public function uninstall() {
+		// Preserve order/log data by default. The DROP only runs when the
+		// merchant explicitly opts in to deletion via the keep-data setting,
+		// so a reinstall or audit can still read the tables.
+		if ($this->config->get('payment_aneepay_keep_data') !== '0') {
+			return;
+		}
+
 		$this->db->query("DROP TABLE IF EXISTS `" . DB_PREFIX . "aneepay_order`");
 		$this->db->query("DROP TABLE IF EXISTS `" . DB_PREFIX . "aneepay_log`");
 	}
