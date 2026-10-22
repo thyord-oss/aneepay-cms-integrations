@@ -115,11 +115,21 @@ class AneePay_Webhook {
 		$registry = $this->registry;
 		$model    = $registry->get('model_extension_payment_aneepay');
 
+		// Unknown statuses are never applied.
+		if (!isset($this->status_map[$status])) {
+			return false;
+		}
+
 		$row = $model->getByOrderId($order_id);
 
 		$current = ($row && isset($row['payment_status'])) ? (string) $row['payment_status'] : '';
 
 		if ($status === $current) {
+			return false;
+		}
+
+		// "success" is terminal: never downgrade a paid order.
+		if ('success' === $current) {
 			return false;
 		}
 

@@ -26,6 +26,21 @@ class Ps_AneepayWebhookModuleFrontController extends ModuleFrontController {
 			$this->respond(400, array('success' => false));
 		}
 
+		$status = (string) $params['status'];
+
+		if (!isset($module->getStateMap()[$status])) {
+			$this->respond(400, array('success' => false));
+		}
+
+		// Reject replayed webhooks: the payload timestamp must not be older than 24h.
+		if (isset($params['timestamp'])) {
+			$ts = (float) $params['timestamp'];
+
+			if ($ts > 0 && (time() - $ts) > 86400) {
+				$this->respond(400, array('success' => false, 'error' => 'stale_timestamp'));
+			}
+		}
+
 		$webhook = new AneePayWebhook($api, new AneePayOrder(), $module->getStateMap());
 		$id_order = $webhook->resolveOrderId($params);
 

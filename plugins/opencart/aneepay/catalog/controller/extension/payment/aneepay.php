@@ -257,10 +257,21 @@ class ControllerExtensionPaymentAneePay extends Controller {
 
 		$status = isset($params['status']) ? (string) $params['status'] : '';
 
-		if ('' === $status) {
+		if ('' === $status || !isset($this->status_map()[$status])) {
 			$this->response->addHeader('HTTP/1.1 400 Bad Request');
 			$this->response->setOutput('{"success":false}');
 			return;
+		}
+
+		// Reject replayed webhooks: the payload timestamp must not be older than 24h.
+		if (isset($params['timestamp'])) {
+			$ts = (float) $params['timestamp'];
+
+			if ($ts > 0 && (time() - $ts) > 86400) {
+				$this->response->addHeader('HTTP/1.1 400 Bad Request');
+				$this->response->setOutput('{"success":false,"error":"stale_timestamp"}');
+				return;
+			}
 		}
 
 		$this->load->model('extension/payment/aneepay');

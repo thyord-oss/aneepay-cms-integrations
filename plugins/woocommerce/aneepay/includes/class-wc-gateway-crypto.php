@@ -969,8 +969,23 @@ function aneepay_handle_webhook( $request ) {
 
 	$status = isset( $params['status'] ) ? sanitize_key( $params['status'] ) : '';
 
-	if ( empty( $status ) ) {
+	if ( ! in_array( $status, array( 'pending', 'success', 'failed', 'cancelled' ), true ) ) {
 		return new WP_REST_Response( array( 'success' => false ), 400 );
+	}
+
+	// Reject replayed webhooks: the payload timestamp must not be older than 24h.
+	if ( isset( $params['timestamp'] ) ) {
+		$ts = (float) $params['timestamp'];
+
+		if ( $ts > 0 && ( time() - $ts ) > DAY_IN_SECONDS ) {
+			return new WP_REST_Response(
+				array(
+					'success' => false,
+					'error'   => 'stale_timestamp',
+				),
+				400
+			);
+		}
 	}
 
 	$order = aneepay_resolve_order( $params );
@@ -1291,10 +1306,21 @@ function aneepay_update_order_by_status( $payment_id, $status, $order_id = 0 ) {
  * @return void
  */
 function aneepay_apply_payment_status( $order, $status, $data = array() ) {
-	$status  = sanitize_key( $status );
-	$current = $order->get_meta( '_aneepay_payment_status', true );
+	$status = sanitize_key( $status );
+
+	// Unknown statuses are never applied.
+	if ( ! in_array( $status, array( 'pending', 'success', 'failed', 'cancelled' ), true ) ) {
+		return;
+	}
+
+	$current = (string) $order->get_meta( '_aneepay_payment_status', true );
 
 	if ( $status === $current ) {
+		return;
+	}
+
+	// "success" is terminal: never downgrade a paid order.
+	if ( 'success' === $current ) {
 		return;
 	}
 
@@ -1329,13 +1355,21 @@ function aneepay_apply_payment_status( $order, $status, $data = array() ) {
 
 			$order->update_status( 'failed', $note );
 			// Restore stock that was reserved when the hosted payment started.
-			wc_increase_stock_levels( $order->get_id() );
+			// Guarded so failed <-> cancelled transitions cannot double-restock.
+			if ( ! $order->get_meta( '_aneepay_stock_restored', true ) ) {
+				wc_increase_stock_levels( $order->get_id() );
+				$order->update_meta_data( '_aneepay_stock_restored', 1 );
+			}
 			break;
 
 		case 'cancelled':
 			$order->update_status( 'cancelled', __( 'AneePay: payment cancelled by the customer.', 'aneepay-crypto-gateway' ) );
 			// Restore stock that was reserved when the hosted payment started.
-			wc_increase_stock_levels( $order->get_id() );
+			// Guarded so failed <-> cancelled transitions cannot double-restock.
+			if ( ! $order->get_meta( '_aneepay_stock_restored', true ) ) {
+				wc_increase_stock_levels( $order->get_id() );
+				$order->update_meta_data( '_aneepay_stock_restored', 1 );
+			}
 			break;
 
 		case 'pending':

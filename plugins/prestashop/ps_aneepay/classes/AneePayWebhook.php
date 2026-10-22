@@ -98,11 +98,21 @@ class AneePayWebhook {
 	 * @return bool
 	 */
 	public function apply($id_order, $status, $note = '') {
+		// Unknown statuses are never applied.
+		if (!isset($this->state_map[$status])) {
+			return false;
+		}
+
 		$row = $this->order_model->getByOrder($id_order);
 
 		$current = ($row && isset($row['payment_status'])) ? (string) $row['payment_status'] : '';
 
 		if ($status === $current) {
+			return false;
+		}
+
+		// "success" is terminal: never downgrade a paid order.
+		if ('success' === $current) {
 			return false;
 		}
 
