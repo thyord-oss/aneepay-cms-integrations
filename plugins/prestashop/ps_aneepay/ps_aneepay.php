@@ -123,10 +123,18 @@ class Ps_Aneepay extends PaymentModule {
 	/**
 	 * Build the API client from the current configuration.
 	 *
-	 * @param string $host Origin host (fallback when site_domain empty).
+	 * The Origin header must always identify the storefront. When the
+	 * merchant has not set ANEEPAY_SITE_DOMAIN we fall back to the shop's
+	 * canonical host so the header is never empty (P0-8).
+	 *
+	 * @param string $host Origin host override (optional).
 	 * @return AneePayApi
 	 */
 	public function getApi($host = '') {
+		if ('' === $host) {
+			$host = (string) $this->shopHost();
+		}
+
 		return new AneePayApi(array(
 			'account_id'     => (string) Configuration::get('ANEEPAY_ACCOUNT_ID'),
 			'webhook_secret' => (string) Configuration::get('ANEEPAY_WEBHOOK_SECRET'),
@@ -138,6 +146,38 @@ class Ps_Aneepay extends PaymentModule {
 			'rate_source'    => (string) Configuration::get('ANEEPAY_RATE_SOURCE', 'auto'),
 			'exchange_rate'  => (string) Configuration::get('ANEEPAY_EXCHANGE_RATE', ''),
 		), Db::getInstance());
+	}
+
+	/**
+	 * Canonical storefront host used as the Origin fallback.
+	 *
+	 * Prefers the Link::getShopDomain() value, then the shop/base URL
+	 * constants. Only the host is returned (no scheme, port or path).
+	 *
+	 * @return string Host, or '' when it cannot be resolved.
+	 */
+	public function shopHost() {
+		if (isset($this->context->link)) {
+			$host = parse_url((string) $this->context->link->getShopDomain(), PHP_URL_HOST);
+
+			if (is_string($host) && '' !== $host) {
+				return $host;
+			}
+		}
+
+		foreach (array('PS_SHOP_URL', 'PS_SHOP_BASE_URI') as $const) {
+			if (!defined($const)) {
+				continue;
+			}
+
+			$host = parse_url((string) constant($const), PHP_URL_HOST);
+
+			if (is_string($host) && '' !== $host) {
+				return $host;
+			}
+		}
+
+		return '';
 	}
 
 	/**
