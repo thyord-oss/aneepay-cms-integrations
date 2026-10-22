@@ -191,6 +191,10 @@ class ControllerExtensionPaymentAneePay extends Controller {
 
 		if ('' === $effective_secret) {
 			$this->error['webhook_secret'] = $this->language->get('error_webhook_secret');
+		} else {
+			// Persist the effective secret: editSetting() saves the whole POST,
+			// so an empty password field would otherwise wipe the stored value.
+			$this->request->post['payment_aneepay_webhook_secret'] = $effective_secret;
 		}
 
 		$rate = (string) ($this->request->post['payment_aneepay_exchange_rate'] ?? '');
